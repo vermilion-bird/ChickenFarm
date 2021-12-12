@@ -1,7 +1,9 @@
 package serverMetric
 
 import (
+	"chickenFarm/requests"
 	"fmt"
+	"math"
 	"net"
 	"strings"
 	"time"
@@ -76,6 +78,11 @@ func GetCpuLoad() *load.AvgStat {
 	return info
 }
 
+func GetOutBoundIPByHost() (ip string) {
+	ip = requests.Get("https://api.cncoder.cn/ip/v1")
+	return
+}
+
 func GetOutBoundIP() (ip string, err error) {
 	conn, err := net.Dial("udp", "8.8.8.8:53")
 	if err != nil {
@@ -106,4 +113,51 @@ func GetOutBoundIPDirect() (ip string) {
 		}
 	}
 	return
+}
+
+var LastSent, LastRecv uint64
+var NetSpeedRecv, NetSpeedSent string
+var previousTime uint64
+
+func GetNetSpeed() {
+	nInfo := GetNetInfo()
+	var sentTotal, recvToal uint64
+	for _, v := range nInfo {
+		if v.Name != "lo" {
+			sentTotal += v.BytesSent
+			recvToal += v.BytesRecv
+		}
+
+	}
+	sunit, runit := "bytes/s", "bytes/s"
+	var sentSpeed, recvSpeed uint64
+	now := uint64(time.Now().Unix())
+	timeDelta := now - previousTime
+	if timeDelta == 0 { //除0错误
+		timeDelta = 1
+	}
+	sentSpeed = uint64(sentTotal-LastSent) / timeDelta
+	interval := uint64(math.Pow(2, 10))
+	if sentSpeed > 1024 {
+		sunit = "kb/s"
+		sentSpeed = sentSpeed / interval
+		if sentSpeed > 1024 {
+			sentSpeed = sentSpeed / interval
+			sunit = "mb/s"
+		}
+	}
+	recvSpeed = uint64(recvToal-LastRecv) / timeDelta
+	if recvSpeed > 1024 {
+		runit = "kb/s"
+		recvSpeed = recvSpeed / interval
+		if recvSpeed > 1024 {
+			recvSpeed = recvSpeed / interval
+			runit = "mb/s"
+		}
+	}
+	NetSpeedRecv = fmt.Sprintf("%d %s", recvSpeed, runit)
+	NetSpeedSent = fmt.Sprintf("%d %s", sentSpeed, sunit)
+	LastSent = sentTotal
+	LastRecv = recvToal
+	previousTime = now
 }

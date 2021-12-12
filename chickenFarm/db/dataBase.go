@@ -1,12 +1,14 @@
 package db
 
 import (
+	"chickenFarm/global"
 	"chickenFarm/model"
 	"encoding/json"
 	"fmt"
 	"strings"
 
 	"gorm.io/gorm/clause"
+	"gorm.io/gorm/logger"
 
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -23,22 +25,20 @@ func main() {
 	GetAllInfo()
 }
 func InitDB() {
-	db := connct()
-	db.AutoMigrate(&model.UpInfo{})
+	// db := connct()
+	Connct()
+	global.DB.AutoMigrate(&model.UpInfo{})
 
 }
-func connct() *gorm.DB {
-	//
-	db, err := gorm.Open(sqlite.Open("/home/caidong/gitRepositories/chickenFarm/chickenFarm/db/sqlite.db"), &gorm.Config{})
-	if err != nil {
-		panic("failed to connect database")
-	}
-	return db
+func Connct() {
+	///www/xj/chickenFarm/db/sqlite.db
+	global.DB, _ = gorm.Open(sqlite.Open("../db/sqlite.db"), &gorm.Config{
+		Logger: logger.Default.LogMode(logger.Info)})
 }
 func GetAllInfo() string {
-	db := connct()
+	// db := connct()
 	var datas []model.UpInfo
-	result := db.Find(&datas)
+	result := global.DB.Find(&datas)
 	var list2 []model.UpInfo
 	for _, res := range datas {
 
@@ -58,20 +58,23 @@ func GetAllInfo() string {
 }
 
 func InsertData(data model.UpInfo) {
-	db := connct()
+	// db := connct()
 	// up := model.UpInfo{Os: "s"}
-	result := db.Create(&data) // 通过数据的指针来创建
+	result := global.DB.Create(&data) // 通过数据的指针来创建
 	fmt.Println(result)
 }
 
 func UpInsert(data model.UpInfo) {
-	db := connct()
 	// Update columns to new value on `id` conflict
-	db.Clauses(clause.OnConflict{
-		Columns:   []clause.Column{{Name: "IP"}},                                                                   // key colume
-		DoUpdates: clause.AssignmentColumns([]string{"mem_used", "cpu_used", "update_time", "uptime", "platform"}), // column needed to be updated
+	global.DB.Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "IP"}},                                                                                       // key colume
+		DoUpdates: clause.AssignmentColumns([]string{"mem_used", "cpu_used", "update_time", "uptime", "send_traffic", "recv_traffic"}), // column needed to be updated
 	}).Create(&data)
 	// MERGE INTO "users" USING *** WHEN NOT MATCHED THEN INSERT *** WHEN MATCHED THEN UPDATE SET "name"="excluded"."name"; SQL Server
 	// INSERT INTO "users" *** ON CONFLICT ("id") DO UPDATE SET "name"="excluded"."name", "age"="excluded"."age"; PostgreSQL
 	// INSERT INTO `users` *** ON DUPLICATE KEY UPDATE `name`=VALUES(name),`age=VALUES(age); MySQL
+}
+
+func DeleteOne(condation string, value string, model interface{}) {
+	global.DB.Where(condation, value).Delete(&model)
 }

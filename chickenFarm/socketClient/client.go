@@ -6,84 +6,137 @@ import (
 	"chickenFarm/requests"
 	"chickenFarm/serverMetric"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"os"
+	"strconv"
 	"time"
-
-	"github.com/robfig/cron"
 )
 
-func checkError(err error) {
+func CheckError(err error) {
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Fatal error ", err.Error())
+		fmt.Fprintf(os.Stderr, "Fatal error:%s", err.Error())
 		os.Exit(1)
 	}
+
 }
 
-func cronTask() {
-	c := cron.New()
-	spec := "*/10 * * * * ?"
-	c.AddFunc(spec, func() {
-		now := time.Now()
-		fmt.Println("cron running:", now.Minute(), now.Second())
-		upInfo()
-	})
-	c.Start()
-	select {}
+//解决断线重连问题
+func doWork(conn net.Conn) error {
+	ch := make(chan int, 100)
+
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case stat := <-ch:
+			if stat == 2 {
+				return errors.New("None Msg")
+			}
+		case <-ticker.C:
+			ch <- 1
+			go ClientMsgHandler(conn, ch)
+		case <-time.After(time.Second * 10):
+			defer conn.Close()
+			fmt.Println("timeout")
+		}
+
+	}
+	return nil
 }
 
 func main() {
-	cronTask()
-}
-func upInfo() {
 	if len(os.Args) != 2 {
-		fmt.Fprintf(os.Stderr, "Usage: %s host:port", os.Args[0])
+		fmt.Fprintf(os.Stderr, "Usage:%s IP:Port\n", os.Args[0])
 		os.Exit(1)
 	}
+	//动态传入服务端IP和端口号
 	service := os.Args[1]
 	udpAddr, err := net.ResolveUDPAddr("udp4", service)
-	checkError(err)
-	conn, err := net.DialUDP("udp", nil, udpAddr)
-	checkError(err)
-	info := getMetrics()
-	_, err = conn.Write(info)
-	checkError(err)
-	var buf [512]byte
-	n, err := conn.Read(buf[0:])
-	checkError(err)
-	fmt.Println(string(buf[0:n]))
-	// os.Exit(0)
+	CheckError(err)
+	for {
+		conn, err := net.DialUDP("udp", nil, udpAddr)
+
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Fatal error:%s", err.Error())
+		} else {
+			defer conn.Close()
+			doWork(conn)
+		}
+		time.Sleep(1 * time.Second)
+	}
+
+}
+
+//客户端消息处理
+func ClientMsgHandler(conn net.Conn, ch chan int) {
+	<-ch
+	//获取当前时间
+	msg := time.Now().String()
+	go SendMsg(conn, msg)
+	go ReadMsg(conn, ch)
+
+}
+
+func GetSession() string {
+	gs1 := time.Now().Unix()
+	gs2 := strconv.FormatInt(gs1, 10)
+	return gs2
+}
+
+//接收服务端发来的消息
+func ReadMsg(conn net.Conn, ch chan int) {
+	//存储被截断的数据
+	// tmpbuf := make([]byte, 0)
+	buf := make([]byte, 1024)
+	// var buf [512]byte
+	//将信息解包
+	n, _ := conn.Read(buf[0:])
+	// tmpbuf = protocol.Depack(append(tmpbuf, buf[:n]...))
+	msg := string(buf[0:n])
+	// fmt.Println("server say:", msg)
+	if len(msg) == 0 {
+		//服务端无返回信息
+		ch <- 2
+	}
+}
+
+//向服务端发送消息
+func SendMsg(conn net.Conn, msg string) {
+	// session := GetSession()
+	// words := []byte("{\"Session\":" + session + ",\"Meta\":\"Monitor\",\"Message\":\"" + msg + "\"}")
+	//将信息封包
+	// smsg := protocol.Enpack([]byte(words))
+	info := GetMetrics()
+	conn.Write(info)
+
 }
 
 func getIPInfo(ip string) (infoMap map[string]interface{}) {
 	url := "https://api.iplocation.net/?ip=" + ip
 	resp := requests.Get(url)
 	infoMap, _ = dataStruct.JsonToMap(resp)
-	fmt.Println(resp)
+	// fmt.Println(resp)
 	return infoMap
 }
 
-func getMetrics() []byte {
+func GetMetrics() []byte {
 	// serverMetric.GetCpuInfo()
-	info := serverMetric.GetCpuLoad()
-	fmt.Println(info)
+	// info := serverMetric.GetCpuLoad()
+	// fmt.Println(info)
 	cpuInfo, percent := serverMetric.GetCpuInfo()
-	fmt.Println(cpuInfo, percent)
-
+	// fmt.Println(cpuInfo, percent)
 	memInfo := serverMetric.GetMemInfo()
-	fmt.Printf("mem info:%v\n", memInfo)
-
+	// fmt.Printf("mem info:%v\n", memInfo)
 	hInfo := serverMetric.GetHostInfo()
-	fmt.Printf("host info:%v uptime:%v boottime:%v\n", hInfo, hInfo.Uptime, hInfo.BootTime)
-
-	nInfo := serverMetric.GetNetInfo()
-	for index, v := range nInfo {
-		fmt.Printf("%v:%v send:%v recv:%v\n", index, v, v.BytesSent, v.BytesRecv)
-	}
-
-	ipd, _ := serverMetric.GetOutBoundIP()
-
+	// fmt.Printf("host info:%v uptime:%v boottime:%v\n", hInfo, hInfo.Uptime, hInfo.BootTime)
+	// nInfo := serverMetric.GetNetInfo()
+	// for index, v := range nInfo {
+	// 	fmt.Printf("%v:%v send:%v recv:%v\n", index, v, v.BytesSent/(2^20), v.BytesRecv/(2^20))
+	// }
+	serverMetric.GetNetSpeed()
+	ipd := serverMetric.GetOutBoundIPByHost()
 	up := model.UpInfo{}
 	up.IP = ipd
 	up.ModelName = cpuInfo[0].ModelName
@@ -94,8 +147,11 @@ func getMetrics() []byte {
 	up.MemUsed = memInfo.UsedPercent
 	up.UpdateTime = time.Now().Unix()
 	ipInfo := getIPInfo(ipd)
+	up.ISP = ipInfo["isp"].(string)
 	up.CCode = ipInfo["country_code2"].(string)
 	up.CName = ipInfo["country_name"].(string)
+	up.RecvTraffic = serverMetric.NetSpeedRecv
+	up.SendTraffic = serverMetric.NetSpeedSent
 	tmpdata := dataStruct.Struct2Map(up)
 	str, _ := json.Marshal(tmpdata)
 	return str

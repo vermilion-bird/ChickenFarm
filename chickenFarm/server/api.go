@@ -2,7 +2,7 @@ package main
 
 import (
 	"chickenFarm/db"
-	"fmt"
+	"chickenFarm/model"
 	"net/http"
 	"time"
 
@@ -26,6 +26,7 @@ func ping(c *gin.Context) {
 	defer ws.Close()
 	for {
 		//读取ws中的数据
+
 		mt, message, err := ws.ReadMessage()
 		if err != nil {
 			break
@@ -35,31 +36,38 @@ func ping(c *gin.Context) {
 		}
 		//写入ws数据
 		for {
-			time.Sleep(5000 * time.Millisecond)
+			time.Sleep(1000 * time.Millisecond)
 
 			msg := db.GetAllInfo()
 
 			err = ws.WriteMessage(mt, []byte(msg))
 			if err != nil {
 				panic(err)
-				break
+				// break
 			}
 		}
 	}
 }
 
 func main() {
-	bindAddress := "0.0.0.0:2303"
+	db.Connct()
+	bindAddress := "0.0.0.0:80"
 	r := gin.Default()
 	// r.LoadHTMLGlob("templates/**/*")
 	// r.GET("/", func(c *gin.Context) {
 	// 	c.HTML(http.StatusOK, "html/index.html", gin.H{})
 	// })
-	r.Static("/assets", "./assets")
-	r.GET("/", func(c *gin.Context) {
-		c.File("templates/html/index.html")
-	})
+	// r.Static("/", "templates/html/")
+	r.LoadHTMLGlob("./dist/*.html")
+	r.StaticFile("/", "./dist/index.html")
+	r.StaticFS("/h5", http.Dir("./dist"))
+	// r.Static("/assets", "./assets")
+	r.GET("/delHostByIP", delHostByIP)
 	r.GET("/ping", ping)
 	r.Run(bindAddress)
-	go fmt.Println("aaaa")
+}
+
+func delHostByIP(c *gin.Context) {
+	ip := c.Query("ip")
+	db.DeleteOne("ip = ?", ip, model.UpInfo{})
 }

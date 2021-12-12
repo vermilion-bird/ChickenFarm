@@ -11,6 +11,7 @@ import (
 )
 
 func main() {
+	db.Connct()
 	service := ":1200"
 	udpAddr, err := net.ResolveUDPAddr("udp4", service)
 	checkError(err)
@@ -27,7 +28,7 @@ func handleClient(conn *net.UDPConn) {
 		return
 	}
 	fmt.Println(msg, string(buf[0:]))
-	daytime := "abc" //time.Now().String()
+	daytime := "receive" //time.Now().String()
 	var data model.UpInfo
 	// 截取有效长度
 	index := bytes.IndexByte(buf[0:], 0)
