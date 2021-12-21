@@ -1,2 +1,4 @@
 dist
 node_mouldes
+*.db
+client

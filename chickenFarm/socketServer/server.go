@@ -11,6 +11,11 @@ import (
 )
 
 func main() {
+	defer func() {
+		if err := recover(); err != nil {
+			fmt.Println("信息处理错误")
+		}
+	}()
 	db.Connct()
 	service := ":1200"
 	udpAddr, err := net.ResolveUDPAddr("udp4", service)
@@ -22,6 +27,11 @@ func main() {
 	}
 }
 func handleClient(conn *net.UDPConn) {
+	defer func() {
+		if err := recover(); err != nil {
+			fmt.Println("数据处理错误")
+		}
+	}()
 	var buf [512]byte
 	msg, addr, err := conn.ReadFromUDP(buf[0:511])
 	if err != nil {

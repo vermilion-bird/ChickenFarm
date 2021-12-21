@@ -1,7 +1,10 @@
 package serverMetric
 
 import (
+	"chickenFarm/dataStruct"
+	"chickenFarm/model"
 	"chickenFarm/requests"
+	"encoding/json"
 	"fmt"
 	"math"
 	"net"
@@ -79,7 +82,7 @@ func GetCpuLoad() *load.AvgStat {
 }
 
 func GetOutBoundIPByHost() (ip string) {
-	ip = requests.Get("https://api.cncoder.cn/ip/v1")
+	ip = requests.Get("https://api.zhaojin.me/ip/v1")
 	return
 }
 
@@ -160,4 +163,53 @@ func GetNetSpeed() {
 	LastSent = sentTotal
 	LastRecv = recvToal
 	previousTime = now
+}
+
+func getIPInfo(ip string) (infoMap map[string]interface{}) {
+	url := "https://api.iplocation.net/?ip=" + ip
+	resp := requests.Get(url)
+	infoMap, _ = dataStruct.JsonToMap(resp)
+	// fmt.Println(resp)
+	return infoMap
+}
+
+func GetMetrics() []byte {
+	defer func() {
+		if err := recover(); err != nil {
+			fmt.Println("获取服务器信息错误")
+		}
+	}()
+	// serverMetric.GetCpuInfo()
+	// info := serverMetric.GetCpuLoad()
+	// fmt.Println(info)
+	cpuInfo, percent := GetCpuInfo()
+	// fmt.Println(cpuInfo, percent)
+	memInfo := GetMemInfo()
+	// fmt.Printf("mem info:%v\n", memInfo)
+	hInfo := GetHostInfo()
+	// fmt.Printf("host info:%v uptime:%v boottime:%v\n", hInfo, hInfo.Uptime, hInfo.BootTime)
+	// nInfo := serverMetric.GetNetInfo()
+	// for index, v := range nInfo {
+	// 	fmt.Printf("%v:%v send:%v recv:%v\n", index, v, v.BytesSent/(2^20), v.BytesRecv/(2^20))
+	// }
+	GetNetSpeed()
+	ipd := GetOutBoundIPByHost()
+	up := model.UpInfo{}
+	up.IP = ipd
+	up.ModelName = cpuInfo[0].ModelName
+	up.Os = hInfo.OS
+	up.Platform = hInfo.Platform
+	up.Uptime = int(hInfo.Uptime)
+	up.CPUUsed = percent[0]
+	up.MemUsed = memInfo.UsedPercent
+	up.UpdateTime = time.Now().Unix()
+	ipInfo := getIPInfo(ipd)
+	up.ISP = ipInfo["isp"].(string)
+	up.CCode = ipInfo["country_code2"].(string)
+	up.CName = ipInfo["country_name"].(string)
+	up.RecvTraffic = NetSpeedRecv
+	up.SendTraffic = NetSpeedSent
+	tmpdata := dataStruct.Struct2Map(up)
+	str, _ := json.Marshal(tmpdata)
+	return str
 }

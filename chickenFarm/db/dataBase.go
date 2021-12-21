@@ -41,9 +41,7 @@ func GetAllInfo() string {
 	result := global.DB.Find(&datas)
 	var list2 []model.UpInfo
 	for _, res := range datas {
-
 		res.Flag = "https://flagcdn.com/" + strings.ToLower(res.CCode) + ".svg"
-
 		list2 = append(list2, res) // note the = instead of :=
 	}
 

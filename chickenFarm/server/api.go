@@ -53,15 +53,9 @@ func main() {
 	db.Connct()
 	bindAddress := "0.0.0.0:80"
 	r := gin.Default()
-	// r.LoadHTMLGlob("templates/**/*")
-	// r.GET("/", func(c *gin.Context) {
-	// 	c.HTML(http.StatusOK, "html/index.html", gin.H{})
-	// })
-	// r.Static("/", "templates/html/")
 	r.LoadHTMLGlob("./dist/*.html")
 	r.StaticFile("/", "./dist/index.html")
 	r.StaticFS("/h5", http.Dir("./dist"))
-	// r.Static("/assets", "./assets")
 	r.GET("/delHostByIP", delHostByIP)
 	r.GET("/ping", ping)
 	r.Run(bindAddress)
